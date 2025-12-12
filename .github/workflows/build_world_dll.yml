@@ -177,7 +177,7 @@ jobs:
         msbuild build\INSTALL.vcxproj /p:Configuration=Release /m
 
     - name: Saving all wheels
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: packed
         path: build/install
