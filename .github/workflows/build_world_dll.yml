@@ -1,0 +1,199 @@
+name: Windows x86_64 dll
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+
+
+jobs:
+  Build:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64]
+        with_contrib: [0]
+        without_gui: [0]
+        build_sdist: [0]
+
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      SDIST: ${{ matrix.build_sdist || 0 }}
+      ENABLE_HEADLESS: ${{ matrix.without_gui }}
+      ENABLE_CONTRIB: ${{ matrix.with_contrib }}
+      OPENCV_TEST_DATA_PATH: ${{ github.workspace }}\opencv_extra\testdata
+
+    steps:
+    - name: Cleanup
+      shell: bash
+      run: |
+        rm -rf ./* || true
+        rm -rf ./.??* || true
+      working-directory: ${{ github.workspace }}
+
+    - name: Setup environment
+      shell: bash
+      run: |
+        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "ENABLE_ROLLING=0" >> $GITHUB_ENV
+        fi
+
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: false
+        fetch-depth: 0
+
+    - name: Sync & update all submodules
+      run: |
+        git submodule sync
+        git submodule update --init --recursive
+
+    - name: Setup MSBuild.exe
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Setup NASM
+      uses: ilammy/setup-nasm@v1
+
+    - name: Configure (CMake generate VS solution)
+      run: |
+        mkdir build
+        cd build
+        cmake ..\opencv `
+          -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_C_FLAGS_RELEASE="/GL /O2 /Ot" `
+          -DCMAKE_SHARED_LINKER_FLAGS_RELEASE="/LTCG /OPT:REF /OPT:ICF" `
+          -DCMAKE_STATIC_LINKER_FLAGS_RELEASE="/LTCG /OPT:REF /OPT:ICF" `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DBUILD_opencv_python3=OFF `
+          -DBUILD_opencv_python2=OFF `
+          -DBUILD_opencv_java=OFF `
+          -DINSTALL_CREATE_DISTRIB=ON `
+          -DBUILD_opencv_apps=OFF `
+          -DBUILD_opencv_freetype=OFF `
+          -DBUILD_SHARED_LIBS=ON `
+          -DBUILD_TESTS=OFF `
+          -DBUILD_PERF_TESTS=OFF `
+          -DBUILD_DOCS=OFF `
+          -DBUILD_OPENEXR=OFF `
+          -DBUILD_JPEG=OFF `
+          -DBUILD_PNG=OFF `
+          -DWITH_CUDA=OFF `
+          -DWITH_MATLAB=OFF `
+          -DBUILD_opencv_dnn=OFF `
+          -DBUILD_opencv_gapi=OFF `
+          -DBUILD_TIFF=OFF `
+          -DBUILD_OPENJPEG=OFF `
+          -DWITH_JPEG=ON `
+          -DWITH_PNG=ON `
+          -DBUILD_WEBP=OFF `
+          -DBUILD_TBB=ON `
+          -DBUILD_IPP_IW=OFF `
+          -DBUILD_ITT=OFF `
+          -DWITH_AVFOUNDATION=OFF `
+          -DWITH_CAP_IOS=OFF `
+          -DWITH_EIGEN=OFF `
+          -DWITH_FFMPEG=OFF `
+          -DWITH_IPP=OFF `
+          -DWITH_HALIDE=OFF `
+          -DWITH_VULKAN=OFF `
+          -DWITH_INF_ENGINE=OFF `
+          -DWITH_NGRAPH=OFF `
+          -DWITH_JASPER=OFF `
+          -DWITH_OPENJPEG=OFF `
+          -DWITH_WEBP=OFF `
+          -DWITH_OPENEXR=OFF `
+          -DWITH_TIFF=OFF `
+          -DWITH_OPENVX=OFF `
+          -DWITH_GDCM=OFF `
+          -DWITH_HPX=OFF `
+          -DWITH_OPENMP=ON `
+          -DWITH_PTHREADS_PF=OFF `
+          -DWITH_V4L=OFF `
+          -DWITH_CLP=OFF `
+          -DWITH_OPENCL=OFF `
+          -DWITH_OPENCL_SVM=OFF `
+          -DWITH_VA=OFF `
+          -DWITH_VA_INTEL=OFF `
+          -DWITH_PROTOBUF=OFF `
+          -DWITH_IMGCODEC_HDR=OFF `
+          -DWITH_IMGCODEC_SUNRASTER=OFF `
+          -DWITH_IMGCODEC_PXM=OFF `
+          -DWITH_IMGCODEC_PFM=OFF `
+          -DWITH_QUIRC=OFF `
+          -DWITH_ANDROID_MEDIANDK=OFF `
+          -DWITH_TENGINE=OFF `
+          -DWITH_ONNX=OFF `
+          -DWITH_TIMVX=OFF `
+          -DWITH_OBSENSOR=OFF `
+          -DWITH_CANN=OFF `
+          -DWITH_FLATBUFFERS=OFF `
+          -DBUILD_ANDROID_PROJECTS=OFF `
+          -DBUILD_ANDROID_EXAMPLES=OFF `
+          -DBUILD_EXAMPLES=OFF `
+          -DBUILD_PACKAGE=OFF `
+          -DBUILD_WITH_STATIC_CRT=OFF `
+          -DBUILD_FAT_JAVA_LIB=OFF `
+          -DBUILD_ANDROID_SERVICE=OFF `
+          -DBUILD_JAVA=OFF `
+          -DBUILD_OBJC=OFF `
+          -DBUILD_KOTLIN_EXTENSIONS=OFF `
+          -DENABLE_PRECOMPILED_HEADERS=OFF `
+          -DENABLE_FAST_MATH=ON `
+          -DCV_TRACE=OFF `
+          -DBUILD_opencv_objc=OFF `
+          -DBUILD_opencv_js=OFF `
+          -DBUILD_opencv_ts=OFF `
+          -DBUILD_opencv_calib3d=OFF `
+          -DBUILD_opencv_flann=OFF `
+          -DBUILD_opencv_objdetect=OFF `
+          -DBUILD_opencv_stitching=OFF `
+          -DBUILD_opencv_ml=OFF `
+          -DBUILD_opencv_features2d=OFF `
+          -DENABLE_LTO=ON `
+          -DWITH_WIN32UI=OFF `
+          -DWITH_QT=OFF `
+          -DWITH_GTK=OFF `
+          -DWITH_MSMF=OFF `
+          -DWITH_OBSENSOR=OFF `
+          -DBUILD_opencv_video=OFF `
+          -DBUILD_opencv_python_tests=OFF `
+          -DBUILD_opencv_photo=OFF `
+          -DBUILD_opencv_highgui=OFF `
+          -DBUILD_opencv_java_bindings_generator=OFF `
+          -DBUILD_opencv_js_bindings_generator=OFF `
+          -DBUILD_opencv_objc_bindings_generator=OFF `
+          -DDNN_ENABLE_PLUGINS=OFF `
+          -DINSTALL_PDB=OFF `
+          -DOPENCV_DNN_OPENCL=OFF `
+          -DOPENCV_DNN_TFLITE=OFF `
+          -DWITH_IMGCODEC_GIF=OFF `
+          -DWITH_GSTREAMER=OFF
+
+    - name: Build with MSBuild
+      run: |
+        msbuild build\INSTALL.vcxproj /p:Configuration=Release /m
+
+    - name: Saving all wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: packed
+        path: build/install
+
+    - name: Zip multiple folders
+      run: Compress-Archive -Path build\install\x64,build\install\include -DestinationPath opencv_world.zip
+
+    - name: Update GitHub Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.release.tag_name }}
+        name: ${{ github.event.release.name }}
+        draft: false
+        prerelease: false
+        files: |
+          opencv_world.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
