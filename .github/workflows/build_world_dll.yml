@@ -1,8 +1,6 @@
 name: Windows x86_64 dll
 
 on:
-  release:
-    types: [published, edited]
   workflow_dispatch:
 
 jobs:
@@ -23,6 +21,8 @@ jobs:
       ENABLE_HEADLESS: ${{ matrix.without_gui }}
       ENABLE_CONTRIB: ${{ matrix.with_contrib }}
       OPENCV_TEST_DATA_PATH: ${{ github.workspace }}\opencv_extra\testdata
+      tag_name: ""
+      release_name: ""
 
     steps:
       - name: Cleanup
@@ -41,8 +41,12 @@ jobs:
           response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/opencv/opencv-python/releases/latest)
 
+          echo "tag_name=$(echo "$response" | jq -r .tag_name)" >> $GITHUB_ENV
+          echo "release_name=$(echo "$response" | jq -r .name)" >> $GITHUB_ENV
           remote_tag=$(echo "$response" | jq -r .tag_name)
+
           git remote set-url origin https://github.com/opencv/opencv-python.git
+          git tag -d "$remote_tag" 2>/dev/null || true
           git fetch origin tag "$remote_tag"
           git checkout "$remote_tag" -f
 
@@ -190,11 +194,10 @@ jobs:
           path: opencv_world.7z
 
       - name: Update GitHub Release
-        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
-          name: ${{ github.event.release.name }}
+          tag_name: ${{ env.tag_name }}
+          name: ${{ env.release_name }}
           draft: false
           prerelease: false
           files: |
