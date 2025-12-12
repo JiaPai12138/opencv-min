@@ -11,6 +11,21 @@ from skbuild import cmaker, setup
 
 
 def main():
+    try:  # copy python314t.lib to resolve errors
+        import shutil
+        import sys
+        from pathlib import Path
+
+        pyver = sys.version_info
+        version = f"{pyver.major}.{pyver.minor}.{pyver.micro}"
+
+        src = Path(rf"C:\hostedtoolcache\windows\Python\{version}\x64-freethreaded\libs\python314t.lib")
+        dst = Path(rf"C:\hostedtoolcache\windows\Python\{version}\x64-freethreaded\libs\python314.lib")
+
+        shutil.copy2(src, dst)
+    except Exception as e:
+        print(f'File copy error: {e}')
+
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     CI_BUILD = os.environ.get("CI_BUILD", "False")
@@ -26,7 +41,8 @@ def main():
     # see https://numpy.org/doc/stable/release/2.3.0-notes.html#numpy-2-3-0-release-notes
     install_requires = [
         'numpy<2.0; python_version<"3.9"',
-        'numpy(>=2, <2.3.0); python_version>="3.9"',
+        'numpy>=2,<2.3.0; python_version>="3.9" and python_version<"3.14"',
+        'numpy>=2.3.0; python_version>="3.14"',
     ]
 
     python_version = cmaker.CMaker.get_python_version()
@@ -37,7 +53,7 @@ def main():
     if python_lib_path == "":
         python_lib_path = "libpython%sm.a" % python_version
     python_lib_path = python_lib_path.replace("\\", "/")
-
+    python_lib_path = python_lib_path.replace("python314t.lib", "python314.lib")  # tmp fix
     python_include_dir = cmaker.CMaker.get_python_include_dir(python_version).replace(
         "\\", "/"
     )
@@ -355,16 +371,6 @@ def main():
     RearrangeCMakeOutput(
         rearrange_cmake_output_data, files_outside_package_dir, package_data.keys()
     )
-
-    try:  # copy python314t.lib to resolve errors
-        import shutil
-        from pathlib import Path
-
-        src = Path(r"C:\hostedtoolcache\windows\Python\3.14.0\x64-freethreaded\libs\python314t.lib")
-        dst = Path(r"C:\hostedtoolcache\windows\Python\3.14.0\x64-freethreaded\libs\python314.lib")
-
-        shutil.copy2(src, dst)
-    except: pass
 
     setup(
         name=package_name,

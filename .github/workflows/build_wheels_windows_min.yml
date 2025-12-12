@@ -1,10 +1,12 @@
 name: Windows x86_64 min
 
 on:
-  release:
-    types: [published, edited]
+  schedule:
+    - cron: '0 0 * * 0'
   workflow_dispatch:
 
+permissions:
+  contents: write
 
 jobs:
   Build:
@@ -25,65 +27,138 @@ jobs:
       ENABLE_HEADLESS: ${{ matrix.without_gui }}
       ENABLE_CONTRIB: ${{ matrix.with_contrib }}
       OPENCV_TEST_DATA_PATH: ${{ github.workspace }}\opencv_extra\testdata
+      has_release: true
+      tag_name: ""
+      release_name: ""
+      remote_name: ""
+      remote_tag: ""
+      move_on: true
 
     steps:
-    - name: Cleanup
-      shell: bash
-      run: |
-        rm -rf ./* || true
-        rm -rf ./.??* || true
-      working-directory: ${{ github.workspace }}
+      - name: Cleanup
+        shell: bash
+        run: |
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+        working-directory: ${{ github.workspace }}
 
-    - name: Setup environment
-      shell: bash
-      run: |
-        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-          echo "ENABLE_ROLLING=0" >> $GITHUB_ENV
-        fi
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-    - name: Checkout
-      uses: actions/checkout@v6
-      with:
-        submodules: false
-        fetch-depth: 0
+      - name: Get latest release info
+        shell: bash
+        run: |
+          response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest)
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ matrix.python-version }}
-        architecture: ${{ matrix.platform }}
+          if echo "$response" | grep -q "Not Found"; then
+            echo "has_release=false" >> $GITHUB_ENV
+          else
+            echo "has_release=true" >> $GITHUB_ENV
+            echo "tag_name=$(echo "$response" | jq -r .tag_name)" >> $GITHUB_ENV
+            echo "release_name=$(echo "$response" | jq -r .name)" >> $GITHUB_ENV
+          fi
 
-    - name: Setup MSBuild.exe
-      uses: microsoft/setup-msbuild@v2
+      - name: Get latest repo release tag
+        shell: bash
+        run: |
+          response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/opencv/opencv-python/releases/latest)
 
-    - name: Setup NASM
-      uses: ilammy/setup-nasm@v1
+          if echo "$response" | grep -q "Not Found"; then
+            echo "move_on=false" >> $GITHUB_ENV
+            exit 0
+          else
+            echo "remote_tag=$(echo "$response" | jq -r .tag_name)" >> $GITHUB_ENV
+            echo "remote_name=$(echo "$response" | jq -r .name)" >> $GITHUB_ENV
+          fi
 
-    - name: Build a package
-      # CMake 3.25 regression fix. See https://stackoverflow.com/questions/74162633/problem-compiling-from-source-opencv-with-mvsc2019-in-64-bit-version
-      run: |
-        python --version
-        python -m pip install --upgrade pip setuptools
-        python -m pip install cmake==3.31.6 numpy toml
-        python -c "import toml; c = toml.load('pyproject_min.toml'); print('\n'.join(c['build-system']['requires']))" >> requirements.txt | python -m pip install -r requirements.txt
-        set "CI_BUILD=1" && python setup_min.py bdist_wheel --dist-dir=%cd%\wheelhouse -v
-      shell: cmd
+      - name: Compare release tags
+        shell: bash
+        run: |
+          echo "Github tag: ${{ env.tag_name }}"
+          echo "Remote tag: ${{ env.remote_tag }}"
 
-    - name: Saving all wheels
-      uses: actions/upload-artifact@v5
-      with:
-        name: wheel-${{ matrix.with_contrib }}-${{ matrix.without_gui }}-${{ matrix.build_sdist }}-${{ matrix.platform }}-${{ matrix.python-version }}
-        path: wheelhouse/opencv*
+          if [ "${{ env.tag_name }}" = "${{ env.remote_tag }}" ]; then
+            echo "move_on=false" >> $GITHUB_ENV
+            exit 0
+          else
+            echo "⚠️ Tags differ! Compiling new version!"
+            echo "tag_name=${{ env.remote_tag }}" >> $GITHUB_ENV
+            echo "release_name=${{ env.remote_name }}" >> $GITHUB_ENV
+            exit 0
+          fi
 
-    - name: Update GitHub Release
-      if: github.event_name == 'release'
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ github.event.release.tag_name }}
-        name: ${{ github.event.release.name }}
-        draft: false
-        prerelease: false
-        files: |
-          wheelhouse/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload
+        if: ${{ env.move_on == 'true' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: Backup-${{ matrix.python-version }}-${{ matrix.without_gui }}
+          path: |
+            pyproject_min.toml
+            setup_min.py
+          retention-days: 1
+
+      - name: Fetch remote code
+        if: ${{ env.move_on == 'true' }}
+        shell: bash
+        run: |
+          git remote set-url origin https://github.com/opencv/opencv-python.git
+          git fetch origin tag "${{ env.tag_name }}"
+          git checkout "${{ env.tag_name }}" -f
+
+          git submodule init
+          git submodule update --recursive
+
+      - name: Download backup
+        if: ${{ env.move_on == 'true' }}
+        uses: actions/download-artifact@v6
+        with:
+          name: Backup-${{ matrix.python-version }}-${{ matrix.without_gui }}
+          path: ${{ github.workspace }}
+
+      - name: Set up Python ${{ matrix.python-version }}
+        if: ${{ env.move_on == 'true' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.platform }}
+
+      - name: Setup MSBuild.exe
+        if: ${{ env.move_on == 'true' }}
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NASM
+        if: ${{ env.move_on == 'true' }}
+        uses: ilammy/setup-nasm@v1
+
+      - name: Build a package
+        if: ${{ env.move_on == 'true' }}
+        # CMake 3.25 regression fix. See https://stackoverflow.com/questions/74162633/problem-compiling-from-source-opencv-with-mvsc2019-in-64-bit-version
+        run: |
+          python --version
+          python -m pip install --upgrade pip setuptools
+          python -m pip install cmake==3.31.10 toml
+          python -c "import toml; c = toml.load('pyproject_min.toml'); print('\n'.join(c['build-system']['requires']))" >> requirements.txt | python -m pip install -r requirements.txt
+          set "CI_BUILD=1" && python setup_min.py bdist_wheel --dist-dir=%cd%\wheelhouse -v
+        shell: cmd
+
+      - name: Saving all wheels
+        if: ${{ env.move_on == 'true' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: wheel-${{ matrix.with_contrib }}-${{ matrix.without_gui }}-${{ matrix.build_sdist }}-${{ matrix.platform }}-${{ matrix.python-version }}
+          path: wheelhouse/opencv*
+
+      - name: Update GitHub Release
+        if: ${{ env.move_on == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.tag_name }}
+          name: ${{ env.release_name }}
+          draft: false
+          prerelease: false
+          files: |
+            wheelhouse/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
