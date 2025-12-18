@@ -191,7 +191,7 @@ jobs:
             build\install\include
 
       - name: Saving all wheels
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: opencv_world
           path: opencv_world.7z

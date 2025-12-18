@@ -91,7 +91,7 @@ jobs:
 
       - name: Upload
         if: ${{ env.move_on == 'true' }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: Backup-${{ matrix.python-version }}-${{ matrix.without_gui }}
           path: |
@@ -145,7 +145,7 @@ jobs:
 
       - name: Saving all wheels
         if: ${{ env.move_on == 'true' }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: wheel-${{ matrix.with_contrib }}-${{ matrix.without_gui }}-${{ matrix.build_sdist }}-${{ matrix.platform }}-${{ matrix.python-version }}
           path: wheelhouse/opencv*
