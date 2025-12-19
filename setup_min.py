@@ -31,18 +31,15 @@ def main():
     CI_BUILD = os.environ.get("CI_BUILD", "False")
     is_CI_build = True if CI_BUILD == "1" else False
     cmake_source_dir = "opencv"
-    minimum_supported_numpy = "1.13.3"
+
     build_contrib = get_build_env_var_by_name("contrib")
     build_headless = get_build_env_var_by_name("headless")
     build_java = "ON" if get_build_env_var_by_name("java") else "OFF"
     build_rolling = get_build_env_var_by_name("rolling")
 
-    # NOTE: since 2.3.0 numpy upgraded from manylinux2014 to manylinux_2_28
-    # see https://numpy.org/doc/stable/release/2.3.0-notes.html#numpy-2-3-0-release-notes
     install_requires = [
         'numpy<2.0; python_version<"3.9"',
-        'numpy>=2,<2.3.0; python_version>="3.9" and python_version<"3.14"',
-        'numpy>=2.3.0; python_version>="3.14"',
+        'numpy>=2; python_version>="3.9"',
     ]
 
     python_version = cmaker.CMaker.get_python_version()
