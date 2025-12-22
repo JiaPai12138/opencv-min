@@ -112,7 +112,7 @@ jobs:
 
       - name: Download backup
         if: ${{ env.move_on == 'true' }}
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: Backup-${{ matrix.python-version }}-${{ matrix.without_gui }}
           path: ${{ github.workspace }}
