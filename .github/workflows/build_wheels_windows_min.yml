@@ -126,7 +126,7 @@ jobs:
 
       - name: Setup MSBuild.exe
         if: ${{ env.move_on == 'true' }}
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       - name: Setup NASM
         if: ${{ env.move_on == 'true' }}
